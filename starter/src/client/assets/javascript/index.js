@@ -271,18 +271,27 @@ function renderRaceStartView(track) {
 
 function resultsView(positions) {
 	positions = positions || []
+	const userPlayerId = parseInt(store.player_id)
 
-	const userPlayer = positions.find(e => e.id === parseInt(store.player_id))
-	if (userPlayer) {
-		userPlayer.driver_name += " (you)"
-	}
-	let count = 1
+	// sort finished positions so the leaderboard matches the race outcome
+	const finalResults = [...positions].sort((a, b) => {
+		const aFinal = a.final_position
+		const bFinal = b.final_position
+
+		if (aFinal && bFinal) return aFinal - bFinal
+		if (aFinal) return -1
+		if (bFinal) return 1
+		return b.segment - a.segment
+	})
   
-	const results = positions.map(p => {
+	const results = finalResults.map((p, index) => {
+		const place = p.final_position || index + 1
+		const name = p.id === userPlayerId ? `${p.driver_name} (you)` : p.driver_name
+
 		return `
 			<tr>
 				<td>
-					<h3>${count++} - ${p.driver_name}</h3>
+					<h3>${place} - ${name}</h3>
 				</td>
 			</tr>
 		`

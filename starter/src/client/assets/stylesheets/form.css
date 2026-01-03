@@ -23,3 +23,9 @@ form h4:hover {
 form h4.selected {
     border: 1px solid rgb(109, 233, 23);
 }
+
+form .form-error {
+    color: #c62828;
+    font-weight: 600;
+    margin: 0 20px;
+}

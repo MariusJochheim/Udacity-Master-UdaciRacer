@@ -83,35 +83,83 @@ async function delay(ms) {
 
 // BELOW THIS LINE IS CODE WHERE STUDENT EDITS ARE NEEDED ----------------------------
 
+function clearFormError() {
+	const existing = document.querySelector('#create-race .form-error')
+	if (existing) {
+		existing.remove()
+	}
+}
+
+function showFormError(message) {
+	const form = document.querySelector('#create-race')
+	if (!form) {
+		renderRaceError(message)
+		return
+	}
+
+	let errorNode = form.querySelector('.form-error')
+	if (!errorNode) {
+		errorNode = document.createElement('p')
+		errorNode.className = 'form-error'
+		form.prepend(errorNode)
+	}
+	errorNode.textContent = message
+}
+
+function renderRaceError(message) {
+	renderAt('#race', `
+		<section class="error">
+			<h2>Unable to start race</h2>
+			<p>${message}</p>
+			<a href="/race">Back to race setup</a>
+		</section>
+	`)
+}
+
 // This async function controls the flow of the race, add the logic and error handling
 async function handleCreateRace() {
 	console.log("in create race")
 
-	// render starting UI
-	renderAt('#race', renderRaceStartView(store.track_name))
+	clearFormError()
 
-	const { player_id, track_id } = store
-	
-	const race = await createRace(player_id, track_id)
-
-	console.log("RACE: ", race)
-	// API can return the race id as either `id` or `ID` depending on the response shape
-	const raceID = race.id || race.ID
-	if (!raceID) {
-		console.error("Race created but id missing in response", race)
+	const { player_id, track_id, track_name } = store
+	if (!player_id || !track_id) {
+		showFormError("Please choose a track and racer before starting.")
 		return
 	}
-	store.race_id = raceID
 
-	
-	// The race has been created, now start the countdown
-	await runCountdown()
+	try {
+		const race = await createRace(player_id, track_id)
+		if (!race) {
+			throw new Error("Race service unavailable. Please try again.")
+		}
 
-	// Kick off the race once the countdown completes
-	await startRace(raceID)
+		console.log("RACE: ", race)
+		// API can return the race id as either `id` or `ID` depending on the response shape
+		const raceID = race.id || race.ID
+		if (!raceID) {
+			throw new Error("Race created but id missing in response.")
+		}
+		store.race_id = raceID
 
-	// Begin polling until the race finishes
-	await runRace(raceID)
+		// render starting UI only after a valid race exists
+		renderAt('#race', renderRaceStartView(track_name))
+
+		// The race has been created, now start the countdown
+		await runCountdown()
+
+		// Kick off the race once the countdown completes
+		const started = await startRace(raceID)
+		if (!started) {
+			throw new Error("Unable to start the race. Please try again.")
+		}
+
+		// Begin polling until the race finishes
+		await runRace(raceID)
+	} catch (error) {
+		console.error("Problem creating race ::", error)
+		renderRaceError(error.message || "Something went wrong starting the race.")
+	}
 }
 
 function runRace(raceID) {
@@ -401,8 +449,16 @@ function createRace(player_id, track_id) {
 		dataType: 'jsonp',
 		body: JSON.stringify(body)
 	})
-	.then(res => res.json())
-	.catch(err => console.log("Problem with createRace request::", err))
+	.then(res => {
+		if (!res.ok) {
+			throw new Error(`Failed to create race (${res.status})`)
+		}
+		return res.json()
+	})
+	.catch(err => {
+		console.log("Problem with createRace request::", err)
+		throw err
+	})
 }
 
 function getRace(id) {
@@ -426,8 +482,16 @@ function startRace(id) {
 		method: 'POST',
 		...defaultFetchOpts(),
 	})
-	.then(() => true) // endpoint returns no content
-	.catch(err => console.log("Problem with getRace request::", err))
+	.then(res => {
+		if (!res.ok) {
+			throw new Error(`Failed to start race (${res.status})`)
+		}
+		return true // endpoint returns no content
+	})
+	.catch(err => {
+		console.log("Problem with startRace request::", err)
+		throw err
+	})
 }
 
 function accelerate(id) {
